@@ -13,8 +13,7 @@ import {
   DialogFooter
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Plus, Search, Download } from "lucide-react";
-import { useExportClients } from "@/hooks/use-export";
+import { Plus, Search } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertClientSchema, type CreateClientRequest } from "@shared/schema";
@@ -40,7 +39,6 @@ export default function ClientsPage() {
     setPage(1);
   }, [searchTerm, statusFilter]);
   const createClient = useCreateClient();
-  const exportClients = useExportClients();
   const canCreate = user?.role === "admin" || user?.role === "editor";
 
   const form = useForm<CreateClientRequest>({
@@ -111,10 +109,6 @@ export default function ClientsPage() {
             </Button>
           </div>
           
-          <Button variant="outline" onClick={() => exportClients.mutate()} disabled={exportClients.isPending} className="h-10">
-            <Download className="w-4 h-4 mr-2" />
-            Exportar CSV
-          </Button>
           {canCreate && (
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>

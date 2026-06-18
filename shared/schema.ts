@@ -203,12 +203,24 @@ export const users = pgTable("users_internal", {
   lastLoginAt: timestamp("last_login_at"),
   loginAttempts: integer("login_attempts").default(0),
   blockedUntil: timestamp("blocked_until"),
+  lastPasswordChangedAt: timestamp("last_password_changed_at").defaultNow(),
+  passwordExpiresAt: timestamp("password_expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, lastLoginAt: true, loginAttempts: true, blockedUntil: true });
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, lastLoginAt: true, loginAttempts: true, blockedUntil: true, lastPasswordChangedAt: true, passwordExpiresAt: true });
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+
+// --- Password History ---
+export const passwordHistory = pgTable("password_history", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type PasswordHistory = typeof passwordHistory.$inferSelect;
 
 // --- Credential Categories ---
 export const credentialCategories = pgTable("credential_categories", {

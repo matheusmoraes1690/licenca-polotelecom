@@ -186,7 +186,6 @@ function UsersSettings() {
 
   const handleResetPassword = () => {
     if (!resetDialog) return;
-    if (newPassword.length < 6) { toast({ title: "Erro", description: "Senha deve ter ao menos 6 caracteres.", variant: "destructive" }); return; }
     if (newPassword !== confirmPassword) { toast({ title: "Erro", description: "As senhas não coincidem.", variant: "destructive" }); return; }
     adminReset.mutate({ id: resetDialog.userId, newPassword }, {
       onSuccess: () => { setResetDialog(null); setNewPassword(""); setConfirmPassword(""); },
@@ -196,9 +195,6 @@ function UsersSettings() {
   const handleCreate = () => {
     if (!newUser.name || !newUser.username || !newUser.password) {
       toast({ title: "Erro", description: "Preencha nome, usuário e senha.", variant: "destructive" }); return;
-    }
-    if (newUser.password.length < 6) {
-      toast({ title: "Erro", description: "A senha deve ter ao menos 6 caracteres.", variant: "destructive" }); return;
     }
     if (newUser.password !== newUser.confirmPassword) {
       toast({ title: "Erro", description: "As senhas não coincidem.", variant: "destructive" }); return;
@@ -307,7 +303,7 @@ function UsersSettings() {
         <div className="space-y-3 py-2">
           <div className="space-y-1">
             <Label htmlFor="new-pw">Nova senha</Label>
-            <Input id="new-pw" type="password" placeholder="Mínimo 6 caracteres" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+            <Input id="new-pw" type="password" placeholder="Mínimo 10 caracteres, maiúscula, minúscula, número e especial" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label htmlFor="confirm-pw">Confirmar senha</Label>
@@ -354,7 +350,7 @@ function UsersSettings() {
           </div>
           <div className="space-y-1">
             <Label htmlFor="new-password">Senha</Label>
-            <Input id="new-password" type="password" placeholder="Mínimo 6 caracteres" value={newUser.password} onChange={(e) => setNewUser((prev) => ({ ...prev, password: e.target.value }))} />
+            <Input id="new-password" type="password" placeholder="Mínimo 10 caracteres, maiúscula, minúscula, número e especial" value={newUser.password} onChange={(e) => setNewUser((prev) => ({ ...prev, password: e.target.value }))} />
           </div>
           <div className="space-y-1">
             <Label htmlFor="new-confirm">Confirmar Senha</Label>
@@ -382,7 +378,6 @@ function MyAccountSettings() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPw.length < 6) { toast({ title: "Erro", description: "Nova senha deve ter ao menos 6 caracteres.", variant: "destructive" }); return; }
     if (newPw !== confirmPw) { toast({ title: "Erro", description: "As senhas não coincidem.", variant: "destructive" }); return; }
     changePassword.mutate({ currentPassword: currentPw, newPassword: newPw }, {
       onSuccess: () => { setCurrentPw(""); setNewPw(""); setConfirmPw(""); },
@@ -406,7 +401,7 @@ function MyAccountSettings() {
           </div>
           <div className="space-y-1">
             <Label htmlFor="new-pw2">Nova senha</Label>
-            <Input id="new-pw2" type="password" placeholder="Mínimo 6 caracteres" value={newPw} onChange={(e) => setNewPw(e.target.value)} required />
+            <Input id="new-pw2" type="password" placeholder="Mínimo 10 caracteres, maiúscula, minúscula, número e especial" value={newPw} onChange={(e) => setNewPw(e.target.value)} required />
           </div>
           <div className="space-y-1">
             <Label htmlFor="confirm-pw2">Confirmar nova senha</Label>

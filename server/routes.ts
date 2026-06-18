@@ -13,6 +13,7 @@ import {
   createUser,
   updateUser,
   changePassword,
+  forcePasswordChange,
   getAllProfiles,
   getProfileById,
   createProfile,
@@ -109,7 +110,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         sess.role = result.user.role;
         const csrfToken = generateCsrfToken();
         res.cookie("csrfToken", csrfToken, { httpOnly: false, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 24 * 60 * 60 * 1000 });
-        return res.json({ id: result.user.id, username: result.user.username, name: result.user.name, profileId: result.user.profileId, role: result.user.role, csrfToken });
+        return res.json({
+          id: result.user.id,
+          username: result.user.username,
+          name: result.user.name,
+          profileId: result.user.profileId,
+          role: result.user.role,
+          csrfToken,
+          requirePasswordChange: result.requirePasswordChange || false,
+        });
       } else {
         return res.status(401).json({ message: result.error || "Credenciais inválidas" });
       }
@@ -142,8 +151,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const { currentPassword, newPassword } = req.body;
       if (!currentPassword || !newPassword) return res.status(400).json({ message: "Campos obrigatórios ausentes" });
-      if (newPassword.length < 6) return res.status(400).json({ message: "Nova senha deve ter ao menos 6 caracteres" });
       const result = await changePassword(req.user!.userId, currentPassword, newPassword);
+      if (!result.success) return res.status(400).json({ message: result.error });
+      res.json({ message: "Senha alterada com sucesso" });
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
+  app.post("/api/auth/force-password-change", isAuthenticated, async (req, res) => {
+    try {
+      const { newPassword } = req.body;
+      if (!newPassword) return res.status(400).json({ message: "Nova senha é obrigatória" });
+      const result = await forcePasswordChange(req.user!.userId, newPassword);
       if (!result.success) return res.status(400).json({ message: result.error });
       res.json({ message: "Senha alterada com sucesso" });
     } catch (err: any) { res.status(500).json({ message: err.message }); }

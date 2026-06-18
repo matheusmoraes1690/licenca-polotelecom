@@ -1,10 +1,31 @@
 import crypto from "crypto";
 import { db } from "./db";
-import { users, profiles, auditLogs } from "@shared/schema";
-import { eq, and, gt, sql } from "drizzle-orm";
+import { users, profiles, auditLogs, passwordHistory } from "@shared/schema";
+import { eq, and, gt, sql, desc } from "drizzle-orm";
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const BLOCK_DURATION_MINUTES = 30;
+const PASSWORD_MAX_AGE_DAYS = 30;
+const PASSWORD_HISTORY_LIMIT = 3;
+
+export function validatePasswordStrength(password: string): { valid: boolean; error?: string } {
+  if (password.length < 10) {
+    return { valid: false, error: "A senha deve ter no mínimo 10 caracteres." };
+  }
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, error: "A senha deve conter pelo menos uma letra maiúscula." };
+  }
+  if (!/[a-z]/.test(password)) {
+    return { valid: false, error: "A senha deve conter pelo menos uma letra minúscula." };
+  }
+  if (!/[0-9]/.test(password)) {
+    return { valid: false, error: "A senha deve conter pelo menos um número." };
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    return { valid: false, error: "A senha deve conter pelo menos um caractere especial." };
+  }
+  return { valid: true };
+}
 
 function hashPassword(password: string): string {
   const salt = crypto.randomBytes(32).toString("hex");
@@ -27,7 +48,13 @@ export async function createUser(data: {
   profileId?: number;
   role?: string;
 }) {
+  const strength = validatePasswordStrength(data.password);
+  if (!strength.valid) {
+    throw new Error(strength.error);
+  }
   const passwordHash = hashPassword(data.password);
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + PASSWORD_MAX_AGE_DAYS);
   const [user] = await db
     .insert(users)
     .values({
@@ -37,8 +64,12 @@ export async function createUser(data: {
       passwordHash,
       profileId: data.profileId || null,
       role: data.role || "viewer",
+      lastPasswordChangedAt: new Date(),
+      passwordExpiresAt: expiresAt,
     })
     .returning();
+  // Store initial password in history
+  await db.insert(passwordHistory).values({ userId: user.id, passwordHash });
   return user;
 }
 
@@ -50,11 +81,44 @@ export async function updateUser(id: number, data: Partial<{
   profileId: number;
   role: string;
   status: string;
-}>) {
+}>): Promise<any> {
+  const existingUser = await getUserById(id);
+  if (!existingUser) return undefined;
+
   const updates: any = { ...data };
   if (data.password) {
+    const strength = validatePasswordStrength(data.password);
+    if (!strength.valid) {
+      throw new Error(strength.error);
+    }
+
+    // Check against last 3 passwords
+    const history = await getPasswordHistory(id, PASSWORD_HISTORY_LIMIT);
+    for (const entry of history) {
+      if (verifyPassword(data.password, entry.passwordHash)) {
+        throw new Error("A nova senha não pode ser igual às 3 últimas senhas utilizadas.");
+      }
+    }
+
     updates.passwordHash = hashPassword(data.password);
     delete updates.password;
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + PASSWORD_MAX_AGE_DAYS);
+    updates.lastPasswordChangedAt = new Date();
+    updates.passwordExpiresAt = expiresAt;
+
+    // Store old password in history
+    await db.insert(passwordHistory).values({ userId: id, passwordHash: existingUser.passwordHash });
+
+    // Keep only the last PASSWORD_HISTORY_LIMIT entries
+    const allHistory = await getPasswordHistory(id, 1000);
+    if (allHistory.length > PASSWORD_HISTORY_LIMIT) {
+      const toDelete = allHistory.slice(PASSWORD_HISTORY_LIMIT);
+      for (const entry of toDelete) {
+        await db.delete(passwordHistory).where(eq(passwordHistory.id, entry.id));
+      }
+    }
   }
   const [user] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
   if (user && (data.profileId !== undefined || data.role !== undefined)) {
@@ -63,13 +127,111 @@ export async function updateUser(id: number, data: Partial<{
   return user;
 }
 
-export async function changePassword(userId: number, currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> {
+export async function getPasswordHistory(userId: number, limit = PASSWORD_HISTORY_LIMIT) {
+  return db
+    .select()
+    .from(passwordHistory)
+    .where(eq(passwordHistory.userId, userId))
+    .orderBy(desc(passwordHistory.createdAt))
+    .limit(limit);
+}
+
+export async function changePassword(
+  userId: number,
+  currentPassword: string,
+  newPassword: string
+): Promise<{ success: boolean; error?: string }> {
   const user = await getUserById(userId);
   if (!user) return { success: false, error: "Usuário não encontrado" };
   if (!verifyPassword(currentPassword, user.passwordHash)) {
     return { success: false, error: "Senha atual incorreta" };
   }
-  await db.update(users).set({ passwordHash: hashPassword(newPassword) }).where(eq(users.id, userId));
+
+  const strength = validatePasswordStrength(newPassword);
+  if (!strength.valid) {
+    return { success: false, error: strength.error };
+  }
+
+  // Check against last 3 passwords
+  const history = await getPasswordHistory(userId, PASSWORD_HISTORY_LIMIT);
+  for (const entry of history) {
+    if (verifyPassword(newPassword, entry.passwordHash)) {
+      return { success: false, error: "A nova senha não pode ser igual às 3 últimas senhas utilizadas." };
+    }
+  }
+
+  const newHash = hashPassword(newPassword);
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + PASSWORD_MAX_AGE_DAYS);
+
+  await db
+    .update(users)
+    .set({
+      passwordHash: newHash,
+      lastPasswordChangedAt: new Date(),
+      passwordExpiresAt: expiresAt,
+    })
+    .where(eq(users.id, userId));
+
+  // Store old password in history
+  await db.insert(passwordHistory).values({ userId, passwordHash: user.passwordHash });
+
+  // Keep only the last PASSWORD_HISTORY_LIMIT entries
+  const allHistory = await getPasswordHistory(userId, 1000);
+  if (allHistory.length > PASSWORD_HISTORY_LIMIT) {
+    const toDelete = allHistory.slice(PASSWORD_HISTORY_LIMIT);
+    for (const entry of toDelete) {
+      await db.delete(passwordHistory).where(eq(passwordHistory.id, entry.id));
+    }
+  }
+
+  invalidateUserSessions(userId);
+  return { success: true };
+}
+
+export async function forcePasswordChange(
+  userId: number,
+  newPassword: string
+): Promise<{ success: boolean; error?: string }> {
+  const user = await getUserById(userId);
+  if (!user) return { success: false, error: "Usuário não encontrado" };
+
+  const strength = validatePasswordStrength(newPassword);
+  if (!strength.valid) {
+    return { success: false, error: strength.error };
+  }
+
+  // Check against last 3 passwords
+  const history = await getPasswordHistory(userId, PASSWORD_HISTORY_LIMIT);
+  for (const entry of history) {
+    if (verifyPassword(newPassword, entry.passwordHash)) {
+      return { success: false, error: "A nova senha não pode ser igual às 3 últimas senhas utilizadas." };
+    }
+  }
+
+  const newHash = hashPassword(newPassword);
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + PASSWORD_MAX_AGE_DAYS);
+
+  await db
+    .update(users)
+    .set({
+      passwordHash: newHash,
+      lastPasswordChangedAt: new Date(),
+      passwordExpiresAt: expiresAt,
+    })
+    .where(eq(users.id, userId));
+
+  await db.insert(passwordHistory).values({ userId, passwordHash: user.passwordHash });
+
+  const allHistory = await getPasswordHistory(userId, 1000);
+  if (allHistory.length > PASSWORD_HISTORY_LIMIT) {
+    const toDelete = allHistory.slice(PASSWORD_HISTORY_LIMIT);
+    for (const entry of toDelete) {
+      await db.delete(passwordHistory).where(eq(passwordHistory.id, entry.id));
+    }
+  }
+
   invalidateUserSessions(userId);
   return { success: true };
 }
@@ -122,7 +284,7 @@ export async function deleteProfile(id: number) {
   await db.delete(profiles).where(eq(profiles.id, id));
 }
 
-export async function login(username: string, password: string, ipAddress?: string, userAgent?: string): Promise<{ success: boolean; user?: any; error?: string }> {
+export async function login(username: string, password: string, ipAddress?: string, userAgent?: string): Promise<{ success: boolean; user?: any; error?: string; requirePasswordChange?: boolean }> {
   const user = await getUserByUsername(username);
 
   if (!user) {
@@ -154,6 +316,10 @@ export async function login(username: string, password: string, ipAddress?: stri
     return { success: false, error: "Credenciais inválidas" };
   }
 
+  // Check password expiration
+  const now = new Date();
+  const passwordExpired = user.passwordExpiresAt ? new Date(user.passwordExpiresAt) <= now : false;
+
   // Reset attempts and update last login
   await db.update(users).set({ loginAttempts: 0, blockedUntil: null, lastLoginAt: new Date() }).where(eq(users.id, user.id));
 
@@ -165,10 +331,14 @@ export async function login(username: string, password: string, ipAddress?: stri
     resource: "auth",
     ipAddress: ipAddress || null,
     userAgent: userAgent || null,
-    details: JSON.stringify({ metodo: "Senha" }),
+    details: JSON.stringify({ metodo: "Senha", passwordExpired }),
   });
 
-  return { success: true, user: { id: user.id, username: user.username, name: user.name, profileId: user.profileId, role: user.role || "viewer" } };
+  return {
+    success: true,
+    user: { id: user.id, username: user.username, name: user.name, profileId: user.profileId, role: user.role || "viewer" },
+    requirePasswordChange: passwordExpired,
+  };
 }
 
 export async function hasPermission(userSession: any, module: string, actions: string[]): Promise<boolean> {
@@ -293,13 +463,19 @@ export async function seedAuth() {
         console.warn("[SECURITY] ADMIN_INITIAL_PASSWORD não está definida. Usuário admin não será criado automaticamente. Defina a variável e reinicie.");
         return;
       }
-      await createUser({
+      const adminUser = await createUser({
         username: "admin",
         name: "Administrador",
         password: initialPassword,
         profileId: adminProfile.id,
         role: "admin",
       });
+      // Seed auth already calls createUser which sets expiration, but ensure it's correct
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + PASSWORD_MAX_AGE_DAYS);
+      await db.update(users)
+        .set({ lastPasswordChangedAt: new Date(), passwordExpiresAt: expiresAt })
+        .where(eq(users.id, adminUser.id));
       console.log("[SECURITY] Usuário admin criado com sucesso. Remova ou altere ADMIN_INITIAL_PASSWORD após o primeiro acesso.");
     }
   }
