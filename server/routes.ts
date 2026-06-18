@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import crypto from "crypto";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
-import { insertCredentialDocumentSchema } from "@shared/schema";
+import { insertCredentialDocumentSchema, createUserSchema, updateUserSchema, createProfileSchema, updateProfileSchema, insertCredentialSchema, insertCredentialCategorySchema } from "@shared/schema";
 import { z } from "zod";
 import {
   login,
@@ -69,11 +69,22 @@ function generateCsrfToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
+const ALLOWED_FILE_TYPES = ["pdf", "doc", "docx", "xls", "xlsx", "zip", "txt", "png", "jpg", "jpeg"];
+
+function sanitizeFileType(fileType: string | null | undefined): string {
+  if (!fileType) return "bin";
+  const ft = fileType.toLowerCase().trim();
+  return ALLOWED_FILE_TYPES.includes(ft) ? ft : "bin";
+}
+
+function sanitizeFileName(name: string): string {
+  return name.replace(/[^\w.\- ]/g, "_").replace(/\s+/g, " ").trim();
+}
+
 function validateCsrf(req: Request, res: Response, next: any) {
   if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return next();
   const tokenFromCookie = req.cookies?.csrfToken;
   const tokenFromHeader = req.headers["x-csrf-token"] as string | undefined;
-  console.log(`[CSRF DEBUG] ${req.method} ${req.path} cookie=${!!tokenFromCookie} header=${!!tokenFromHeader} match=${tokenFromCookie === tokenFromHeader}`);
   if (!tokenFromCookie || !tokenFromHeader || tokenFromCookie !== tokenFromHeader) {
     console.warn(`[CSRF BLOCKED] ${req.method} ${req.path} cookie=${!!tokenFromCookie} header=${!!tokenFromHeader}`);
     return res.status(403).json({ message: "CSRF token inválido" });
@@ -154,29 +165,50 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/users", isAuthenticated, isAdmin, async (req, res) => {
-    try { const user = await createUser(req.body); res.status(201).json({ ...user, passwordHash: undefined }); }
-    catch (err: any) { res.status(400).json({ message: err.message }); }
+    try {
+      const input = createUserSchema.parse(req.body);
+      const user = await createUser(input);
+      res.status(201).json({ ...user, passwordHash: undefined });
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      res.status(400).json({ message: (err as any).message });
+    }
   });
 
   app.put("/api/users/:id", isAuthenticated, async (req, res) => {
     try {
       const id = Number(req.params.id);
       if (req.user?.userId !== id && req.user?.role !== "admin") return res.status(403).json({ message: "Acesso negado" });
-      const user = await updateUser(id, req.body);
+      const input = updateUserSchema.parse(req.body);
+      const user = await updateUser(id, input);
       res.json({ ...user, passwordHash: undefined });
-    } catch (err: any) { res.status(400).json({ message: err.message }); }
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      res.status(400).json({ message: (err as any).message });
+    }
   });
 
   app.get("/api/profiles", isAuthenticated, async (req, res) => { res.json(await getAllProfiles()); });
 
   app.post("/api/profiles", isAuthenticated, isAdmin, async (req, res) => {
-    try { const profile = await createProfile(req.body); res.status(201).json(profile); }
-    catch (err: any) { res.status(400).json({ message: err.message }); }
+    try {
+      const input = createProfileSchema.parse(req.body);
+      const profile = await createProfile(input);
+      res.status(201).json(profile);
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      res.status(400).json({ message: (err as any).message });
+    }
   });
 
   app.put("/api/profiles/:id", isAuthenticated, isAdmin, async (req, res) => {
-    try { res.json(await updateProfile(Number(req.params.id), req.body)); }
-    catch (err: any) { res.status(400).json({ message: err.message }); }
+    try {
+      const input = updateProfileSchema.parse(req.body);
+      res.json(await updateProfile(Number(req.params.id), input));
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      res.status(400).json({ message: (err as any).message });
+    }
   });
 
   app.delete("/api/profiles/:id", isAuthenticated, isAdmin, async (req, res) => {
@@ -195,8 +227,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/credential-categories", isAuthenticated, async (req, res) => { res.json(await storage.getCredentialCategories()); });
 
   app.post("/api/credential-categories", isAuthenticated, requirePermission("credentials", ["create"]), async (req, res) => {
-    try { res.status(201).json(await storage.createCredentialCategory(req.body)); }
-    catch (err: any) { res.status(400).json({ message: err.message }); }
+    try {
+      const input = insertCredentialCategorySchema.parse(req.body);
+      res.status(201).json(await storage.createCredentialCategory(input));
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      res.status(400).json({ message: (err as any).message });
+    }
   });
 
   // Credentials
@@ -221,22 +258,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/credentials", isAuthenticated, requirePermission("credentials", ["create"]), async (req, res) => {
     try {
-      const credential = await storage.createCredential(req.body);
+      const input = insertCredentialSchema.parse(req.body);
+      const credential = await storage.createCredential(input);
       await storage.createAuditLog({ userId: req.user!.userId, userName: req.user!.name, clientId: credential.clientId, credentialId: credential.id, action: "create", resource: "credential", ipAddress: req.ip || null, userAgent: req.headers["user-agent"] || null, details: JSON.stringify({ title: credential.title }) });
       res.status(201).json(credential);
-    } catch (err: any) { res.status(400).json({ message: err.message }); }
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      res.status(400).json({ message: (err as any).message });
+    }
   });
 
   app.put("/api/credentials/:id", isAuthenticated, requirePermission("credentials", ["edit"]), async (req, res) => {
     try {
       const id = Number(req.params.id);
+      const input = insertCredentialSchema.partial().parse(req.body);
       const previous = await storage.getCredentialById(id);
-      const credential = await storage.updateCredential(id, req.body, req.user!.userId);
+      const credential = await storage.updateCredential(id, input, req.user!.userId);
       const snapshot = previous ? JSON.stringify(previous) : null;
-      const changedFields = previous ? Object.entries(req.body).filter(([k, v]) => (previous as any)[k] !== v).map(([k]) => k) : [];
+      const changedFields = previous ? Object.entries(input as any).filter(([k, v]) => (previous as any)[k] !== v).map(([k]) => k) : [];
       await storage.createAuditLog({ userId: req.user!.userId, userName: req.user!.name, clientId: credential.clientId, credentialId: credential.id, action: "update", resource: "credential", entity: "credential", entityId: credential.id, ipAddress: req.ip || null, userAgent: req.headers["user-agent"] || null, snapshot, details: JSON.stringify({ title: credential.title, changedFields }) });
       res.json(credential);
-    } catch (err: any) { res.status(400).json({ message: err.message }); }
+    } catch (err) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: err.errors[0].message });
+      res.status(400).json({ message: (err as any).message });
+    }
   });
 
   app.delete("/api/credentials/:id", isAuthenticated, requirePermission("credentials", ["delete"]), async (req, res) => {
@@ -475,19 +520,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/credentials/:credentialId/documents/:id", isAuthenticated, requirePermission("documents", ["delete"]), async (req, res) => { await storage.deleteCredentialDocument(Number(req.params.id)); res.status(204).send(); });
 
   // Credential Document file
-  app.get("/api/credential-documents/:id/file", isAuthenticated, async (req, res) => {
+  app.get("/api/credential-documents/:id/file", isAuthenticated, requirePermission("credentials", ["view"]), async (req, res) => {
     try {
       const document = await storage.getCredentialDocumentById(Number(req.params.id));
       if (!document) return res.status(404).json({ message: "Document not found" });
+      // Verify ownership: ensure credential exists
+      const credential = await storage.getCredentialById(document.credentialId);
+      if (!credential) return res.status(404).json({ message: "Credential not found" });
       if (document.type === "link") {
         return res.json({ redirectUrl: document.url });
       }
       const base64Data = document.url.split(",")[1];
       const buffer = Buffer.from(base64Data, "base64");
-      const mimeType = document.fileType === "pdf" ? "application/pdf" : document.fileType === "doc" ? "application/msword" : document.fileType === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : document.fileType === "xls" ? "application/vnd.ms-excel" : document.fileType === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : document.fileType === "zip" ? "application/zip" : "application/octet-stream";
+      const ft = sanitizeFileType(document.fileType);
+      const mimeType = ft === "pdf" ? "application/pdf" : ft === "doc" ? "application/msword" : ft === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : ft === "xls" ? "application/vnd.ms-excel" : ft === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : ft === "zip" ? "application/zip" : "application/octet-stream";
+      const safeName = sanitizeFileName(document.name);
       res.setHeader("Content-Type", mimeType);
       res.setHeader("Content-Length", buffer.length);
-      const disposition = document.fileType === "pdf" ? `inline; filename="${document.name}"` : `attachment; filename="${document.name}"`;
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      const disposition = ft === "pdf" ? `inline; filename="${safeName}"` : `attachment; filename="${safeName}"`;
       res.setHeader("Content-Disposition", disposition);
       res.send(buffer);
     } catch (error) { console.error("Error serving document:", error); res.status(500).json({ message: "Error serving document" }); }
@@ -498,15 +549,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const document = await storage.getClientDocumentById(Number(req.params.id));
       if (!document) return res.status(404).json({ message: "Document not found" });
+      // Verify ownership: ensure client exists
+      const client = await storage.getClient(document.clientId);
+      if (!client) return res.status(404).json({ message: "Client not found" });
       if (document.type === "link") {
         return res.json({ redirectUrl: document.url });
       }
       const base64Data = document.url.split(",")[1];
       const buffer = Buffer.from(base64Data, "base64");
-      const mimeType = document.fileType === "pdf" ? "application/pdf" : document.fileType === "doc" ? "application/msword" : document.fileType === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : document.fileType === "xls" ? "application/vnd.ms-excel" : document.fileType === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : document.fileType === "zip" ? "application/zip" : "application/octet-stream";
+      const ft = sanitizeFileType(document.fileType);
+      const mimeType = ft === "pdf" ? "application/pdf" : ft === "doc" ? "application/msword" : ft === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : ft === "xls" ? "application/vnd.ms-excel" : ft === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : ft === "zip" ? "application/zip" : "application/octet-stream";
+      const safeName = sanitizeFileName(document.name);
       res.setHeader("Content-Type", mimeType);
       res.setHeader("Content-Length", buffer.length);
-      const disposition = document.fileType === "pdf" ? `inline; filename="${document.name}"` : `attachment; filename="${document.name}"`;
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      const disposition = ft === "pdf" ? `inline; filename="${safeName}"` : `attachment; filename="${safeName}"`;
       res.setHeader("Content-Disposition", disposition);
       res.send(buffer);
     } catch (error) { console.error("Error serving document:", error); res.status(500).json({ message: "Error serving document" }); }

@@ -261,6 +261,34 @@ export const insertCredentialSchema = z.object({
 export type Credential = typeof credentials.$inferSelect;
 export type InsertCredential = z.infer<typeof insertCredentialSchema>;
 
+// --- API Route Validation Schemas ---
+export const createUserSchema = z.object({
+  username: z.string().min(1, "Username é obrigatório").max(50),
+  name: z.string().min(1, "Nome é obrigatório").max(100),
+  email: z.string().email("Email inválido").optional(),
+  password: z.string().min(6, "Senha deve ter ao menos 6 caracteres"),
+  profileId: z.number().int().positive().optional(),
+  role: z.enum(["admin", "editor", "viewer"]).optional().default("viewer"),
+});
+
+export const updateUserSchema = z.object({
+  username: z.string().min(1).max(50).optional(),
+  name: z.string().min(1).max(100).optional(),
+  email: z.string().email().optional(),
+  password: z.string().min(6).optional(),
+  profileId: z.number().int().positive().optional(),
+  role: z.enum(["admin", "editor", "viewer"]).optional(),
+  status: z.enum(["active", "inactive", "blocked"]).optional(),
+});
+
+export const createProfileSchema = z.object({
+  name: z.string().min(1, "Nome é obrigatório").max(100),
+  description: z.string().optional(),
+  permissions: z.record(z.any()).optional(),
+});
+
+export const updateProfileSchema = createProfileSchema.partial();
+
 // --- Credential Custom Fields ---
 export const credentialCustomFields = pgTable("credential_custom_fields", {
   id: serial("id").primaryKey(),

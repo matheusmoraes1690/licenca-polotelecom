@@ -13,7 +13,7 @@ import { Pool } from "pg";
 const app = express();
 const httpServer = createServer(app);
 
-app.set("trust proxy", 1);
+app.set("trust proxy", ["loopback", "linklocal", "uniquelocal"]);
 
 declare module "http" {
   interface IncomingMessage {
@@ -80,7 +80,7 @@ const globalLimiter = rateLimit({
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req: Request) => req.path === "/api/auth/login" || process.env.NODE_ENV !== "production",
+  skip: (req: Request) => req.path === "/api/auth/login",
 });
 
 const loginLimiter = rateLimit({
@@ -99,7 +99,7 @@ app.use("/api/auth/login", loginLimiter);
 app.use(
   session({
     store: new PgSession({ pool: sessionPool, tableName: "app_sessions", createTableIfMissing: true }),
-    secret: process.env.VAULT_ENCRYPTION_KEY || "fallback-secret-key-change-me",
+    secret: process.env.SESSION_SECRET || process.env.VAULT_ENCRYPTION_KEY || (() => { throw new Error("SESSION_SECRET ou VAULT_ENCRYPTION_KEY devem estar configurados"); })(),
     resave: false,
     saveUninitialized: false,
     name: "sessionId",
