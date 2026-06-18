@@ -98,7 +98,7 @@ app.use("/api/auth/login", loginLimiter);
 
 app.use(
   session({
-    store: new PgSession({ pool: sessionPool, tableName: "app_sessions", createTableIfMissing: true }),
+    store: new PgSession({ pool: sessionPool, tableName: "app_sessions" }),
     secret: process.env.SESSION_SECRET || process.env.VAULT_ENCRYPTION_KEY || (() => { throw new Error("SESSION_SECRET ou VAULT_ENCRYPTION_KEY devem estar configurados"); })(),
     resave: false,
     saveUninitialized: false,
