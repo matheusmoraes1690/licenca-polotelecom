@@ -756,6 +756,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Public branding endpoint (used by login page, no auth required)
+  app.get("/api/branding", async (req, res) => {
+    const setting = await storage.getSystemSetting("branding");
+    if (!setting) return res.json({ key: "branding", value: JSON.stringify({ sidebarLogo: null, favicon: null, loginHeroImage: null, appName: "Polo Telecom" }) });
+    res.json(setting);
+  });
+
   // System Settings
   app.get("/api/settings/:key", isAuthenticated, async (req, res) => {
     const setting = await storage.getSystemSetting(req.params.key);

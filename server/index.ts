@@ -114,14 +114,14 @@ app.use(
 
 app.use(
   express.json({
-    limit: "100kb",
+    limit: "10mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false, limit: "100kb" }));
+app.use(express.urlencoded({ extended: false, limit: "10mb" }));
 
 // Error handler for JSON parsing
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

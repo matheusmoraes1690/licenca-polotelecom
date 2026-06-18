@@ -13,6 +13,7 @@ export interface BrandingSettings {
   sidebarLogo?: string | null;
   favicon?: string | null;
   appName?: string | null;
+  loginHeroImage?: string | null;
 }
 
 export function useSystemSetting(key: string) {
@@ -27,12 +28,19 @@ export function useSystemSetting(key: string) {
 }
 
 export function useBrandingSettings() {
-  const { data: setting } = useSystemSetting("branding");
-  if (!setting) return { sidebarLogo: null, favicon: null, appName: null } as BrandingSettings;
+  const { data: setting } = useQuery<SystemSetting>({
+    queryKey: ["branding"],
+    queryFn: async () => {
+      const res = await fetch("/api/branding", { credentials: "include" });
+      if (!res.ok) throw new Error("Falha ao carregar branding");
+      return res.json();
+    },
+  });
+  if (!setting) return { sidebarLogo: null, favicon: null, appName: null, loginHeroImage: null } as BrandingSettings;
   try {
     return JSON.parse(setting.value) as BrandingSettings;
   } catch {
-    return { sidebarLogo: null, favicon: null, appName: null } as BrandingSettings;
+    return { sidebarLogo: null, favicon: null, appName: null, loginHeroImage: null } as BrandingSettings;
   }
 }
 

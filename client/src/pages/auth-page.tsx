@@ -4,12 +4,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CheckCircle2, ShieldCheck, Zap, KeyRound } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useBrandingSettings } from "@/hooks/use-settings";
 import { useMutation } from "@tanstack/react-query";
 import { Redirect } from "wouter";
 import { useState } from "react";
 
 export default function AuthPage() {
   const { user, isLoading } = useAuth();
+  const branding = useBrandingSettings();
   const [loginData, setLoginData] = useState({ username: "", password: "" });
   const [error, setError] = useState("");
 
@@ -57,49 +59,62 @@ export default function AuthPage() {
       {/* Left Panel: Hero */}
       <div className="flex-1 lg:flex flex-col justify-between p-8 lg:p-12 relative overflow-hidden bg-zinc-900 text-white">
         {/* Abstract Background Decoration */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/20 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[100px] translate-y-1/3 -translate-x-1/3" />
-        
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-12">
-            <div className="h-10 w-10 rounded-xl bg-white text-zinc-900 flex items-center justify-center font-bold text-xl">
-              <KeyRound className="w-6 h-6" />
-            </div>
-            <span className="font-display font-bold text-xl tracking-tight">Cofre de Senhas</span>
-          </div>
+        {!branding.loginHeroImage && (
+          <>
+            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/20 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3" />
+            <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[100px] translate-y-1/3 -translate-x-1/3" />
+          </>
+        )}
+        {branding.loginHeroImage ? (
+          <img
+            src={branding.loginHeroImage}
+            alt="Login"
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        ) : (
+          <>
+            <div className="relative z-10">
+              <div className="flex items-center gap-3 mb-12">
+                <div className="h-10 w-10 rounded-xl bg-white text-zinc-900 flex items-center justify-center font-bold text-xl">
+                  <KeyRound className="w-6 h-6" />
+                </div>
+                <span className="font-display font-bold text-xl tracking-tight">{branding.appName || "Cofre de Senhas"}</span>
+              </div>
 
-          <h1 className="font-display text-4xl lg:text-6xl font-bold leading-[1.1] mb-6">
-            Controle seguro de acessos e informações sensíveis.
-          </h1>
-          <p className="text-lg text-zinc-400 max-w-xl leading-relaxed">
-            Gerencie credenciais, documentos, licenças, equipamentos e informações críticas dos clientes em um ambiente seguro, auditável e organizado.
-          </p>
-        </div>
+              <h1 className="font-display text-4xl lg:text-6xl font-bold leading-[1.1] mb-6">
+                Controle seguro de acessos e informações sensíveis.
+              </h1>
+              <p className="text-lg text-zinc-400 max-w-xl leading-relaxed">
+                Gerencie credenciais, documentos, licenças, equipamentos e informações críticas dos clientes em um ambiente seguro, auditável e organizado.
+              </p>
+            </div>
 
-        <div className="relative z-10 mt-12 space-y-6">
-          <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-md border border-white/20">
-              <Zap className="w-6 h-6 text-yellow-400" />
+            <div className="relative z-10 mt-12 space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-md border border-white/20">
+                  <Zap className="w-6 h-6 text-yellow-400" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg">Acesso Rápido</h3>
+                  <p className="text-zinc-400 text-sm">Busque e copie credenciais com um clique.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-md border border-white/20">
+                  <ShieldCheck className="w-6 h-6 text-green-400" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg">Segurança em Primeiro Lugar</h3>
+                  <p className="text-zinc-400 text-sm">Criptografia, auditoria e controle de acessos.</p>
+                </div>
+              </div>
             </div>
-            <div>
-              <h3 className="font-bold text-lg">Acesso Rápido</h3>
-              <p className="text-zinc-400 text-sm">Busque e copie credenciais com um clique.</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-white/10 flex items-center justify-center backdrop-blur-md border border-white/20">
-              <ShieldCheck className="w-6 h-6 text-green-400" />
-            </div>
-            <div>
-              <h3 className="font-bold text-lg">Segurança em Primeiro Lugar</h3>
-              <p className="text-zinc-400 text-sm">Criptografia, auditoria e controle de acessos.</p>
-            </div>
-          </div>
-        </div>
 
-        <div className="relative z-10 mt-12 text-sm text-zinc-500">
-          © 2024 Cofre de Senhas. Todos os direitos reservados.
-        </div>
+            <div className="relative z-10 mt-12 text-sm text-zinc-500">
+              © 2024 {branding.appName || "Cofre de Senhas"}. Todos os direitos reservados.
+            </div>
+          </>
+        )}
       </div>
 
       {/* Right Panel: Login */}
@@ -151,9 +166,6 @@ export default function AuthPage() {
             </form>
           </Card>
 
-          <p className="text-center text-xs text-muted-foreground">
-            Use admin/admin para acessar o sistema
-          </p>
         </div>
       </div>
     </div>

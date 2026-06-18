@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Layout } from "@/components/layout";
 import { useSystemSetting, useUpdateSystemSetting } from "@/hooks/use-settings";
-import { useUsers, useUpdateUser, useAdminResetPassword, useChangePassword } from "@/hooks/use-users";
+import { useUsers, useUpdateUser, useCreateUser, useAdminResetPassword, useChangePassword } from "@/hooks/use-users";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ImagePlus, X, Save, UserCog, KeyRound, Lock } from "lucide-react";
+import { ImagePlus, X, Save, UserCog, KeyRound, Lock, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 function BrandingSettings() {
@@ -19,6 +19,7 @@ function BrandingSettings() {
   const { toast } = useToast();
   const [sidebarLogo, setSidebarLogo] = useState<string | null>(null);
   const [favicon, setFavicon] = useState<string | null>(null);
+  const [loginHeroImage, setLoginHeroImage] = useState<string | null>(null);
   const [appName, setAppName] = useState<string>("Polo Telecom");
 
   useEffect(() => {
@@ -27,6 +28,7 @@ function BrandingSettings() {
         const parsed = JSON.parse(brandingSetting.value);
         setSidebarLogo(parsed.sidebarLogo || null);
         setFavicon(parsed.favicon || null);
+        setLoginHeroImage(parsed.loginHeroImage || null);
         setAppName(parsed.appName || "Polo Telecom");
       } catch {
         // mantém defaults
@@ -52,7 +54,7 @@ function BrandingSettings() {
   };
 
   const handleSave = () => {
-    const value = JSON.stringify({ sidebarLogo, favicon, appName: appName || "Polo Telecom" });
+    const value = JSON.stringify({ sidebarLogo, favicon, loginHeroImage, appName: appName || "Polo Telecom" });
     updateSetting.mutate({ key: "branding", value });
   };
 
@@ -131,6 +133,33 @@ function BrandingSettings() {
           <p className="text-xs text-muted-foreground">Recomendado: 32x32px ou 64x64px, até 2MB.</p>
         </div>
 
+        <div className="space-y-2">
+          <Label>Imagem do Login (painel esquerdo)</Label>
+          <div className="flex items-center gap-4">
+            <div className="h-28 w-48 rounded-xl border border-border bg-muted flex items-center justify-center overflow-hidden">
+              {loginHeroImage ? (
+                <img src={loginHeroImage} alt="Imagem login" className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-xs text-muted-foreground">Padrão (CSS)</span>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="cursor-pointer inline-flex">
+                <input type="file" accept="image/*" className="sr-only" onChange={(e) => handleFileChange(e, setLoginHeroImage)} />
+                <span className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-border bg-card hover:bg-accent hover:text-accent-foreground h-8 px-3">
+                  <ImagePlus className="w-4 h-4 mr-1" />Selecionar
+                </span>
+              </label>
+              {loginHeroImage && (
+                <Button type="button" variant="ghost" size="sm" onClick={() => setLoginHeroImage(null)} className="text-polo-red hover:text-polo-red-dark hover:bg-polo-red-light">
+                  <X className="w-4 h-4 mr-1" />Remover
+                </Button>
+              )}
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">Recomendado: proporção vertical, até 2MB. Deixe vazio para usar o design padrão.</p>
+        </div>
+
         <div className="pt-2 flex justify-end">
           <Button onClick={handleSave} disabled={updateSetting.isPending} className="bg-polo-red hover:bg-polo-red-dark">
             <Save className="w-4 h-4 mr-2" />
@@ -145,11 +174,14 @@ function BrandingSettings() {
 function UsersSettings() {
   const { data: users, isLoading } = useUsers();
   const updateUser = useUpdateUser();
+  const createUser = useCreateUser();
   const adminReset = useAdminResetPassword();
   const [editing, setEditing] = useState<Record<number, { name: string; role: string; status: string }>>({})
   const [resetDialog, setResetDialog] = useState<{ open: boolean; userId: number; username: string } | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newUser, setNewUser] = useState({ name: "", username: "", email: "", password: "", confirmPassword: "", role: "viewer" });
   const { toast } = useToast();
 
   const handleResetPassword = () => {
@@ -159,7 +191,23 @@ function UsersSettings() {
     adminReset.mutate({ id: resetDialog.userId, newPassword }, {
       onSuccess: () => { setResetDialog(null); setNewPassword(""); setConfirmPassword(""); },
     });
-  };;
+  };
+
+  const handleCreate = () => {
+    if (!newUser.name || !newUser.username || !newUser.password) {
+      toast({ title: "Erro", description: "Preencha nome, usuário e senha.", variant: "destructive" }); return;
+    }
+    if (newUser.password.length < 6) {
+      toast({ title: "Erro", description: "A senha deve ter ao menos 6 caracteres.", variant: "destructive" }); return;
+    }
+    if (newUser.password !== newUser.confirmPassword) {
+      toast({ title: "Erro", description: "As senhas não coincidem.", variant: "destructive" }); return;
+    }
+    createUser.mutate(
+      { name: newUser.name, username: newUser.username, email: newUser.email || undefined, password: newUser.password, role: newUser.role },
+      { onSuccess: () => { setCreateOpen(false); setNewUser({ name: "", username: "", email: "", password: "", confirmPassword: "", role: "viewer" }); } }
+    );
+  };
 
   if (isLoading) {
     return (
@@ -187,11 +235,18 @@ function UsersSettings() {
     <>
     <Card className="border-border shadow-sm overflow-hidden">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-foreground">
-          <UserCog className="w-5 h-5 text-polo-red" />
-          Usuários
-        </CardTitle>
-        <CardDescription>Gerencie usuários, funções e status.</CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-foreground">
+              <UserCog className="w-5 h-5 text-polo-red" />
+              Usuários
+            </CardTitle>
+            <CardDescription>Gerencie usuários, funções e status.</CardDescription>
+          </div>
+          <Button size="sm" onClick={() => setCreateOpen(true)} className="bg-polo-red hover:bg-polo-red-dark">
+            <UserPlus className="w-4 h-4 mr-1" />Novo Usuário
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <table className="w-full text-sm">
@@ -263,6 +318,53 @@ function UsersSettings() {
           <Button variant="outline" onClick={() => setResetDialog(null)}>Cancelar</Button>
           <Button onClick={handleResetPassword} disabled={adminReset.isPending} className="bg-polo-red hover:bg-polo-red-dark">
             {adminReset.isPending ? "Salvando..." : "Redefinir Senha"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <UserPlus className="w-5 h-5 text-polo-red" />
+            Novo Usuário
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div className="space-y-1">
+            <Label htmlFor="new-name">Nome</Label>
+            <Input id="new-name" placeholder="Nome completo" value={newUser.name} onChange={(e) => setNewUser((prev) => ({ ...prev, name: e.target.value }))} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="new-username">Usuário</Label>
+            <Input id="new-username" placeholder="Nome de usuário" value={newUser.username} onChange={(e) => setNewUser((prev) => ({ ...prev, username: e.target.value }))} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="new-email">Email</Label>
+            <Input id="new-email" type="email" placeholder="email@exemplo.com" value={newUser.email} onChange={(e) => setNewUser((prev) => ({ ...prev, email: e.target.value }))} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="new-role">Função</Label>
+            <select id="new-role" value={newUser.role} onChange={(e) => setNewUser((prev) => ({ ...prev, role: e.target.value }))} className="h-9 w-full px-2 rounded-md border border-input text-sm bg-background">
+              <option value="admin">Administrador</option>
+              <option value="editor">Editor</option>
+              <option value="viewer">Visualizador</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="new-password">Senha</Label>
+            <Input id="new-password" type="password" placeholder="Mínimo 6 caracteres" value={newUser.password} onChange={(e) => setNewUser((prev) => ({ ...prev, password: e.target.value }))} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="new-confirm">Confirmar Senha</Label>
+            <Input id="new-confirm" type="password" placeholder="Repita a senha" value={newUser.confirmPassword} onChange={(e) => setNewUser((prev) => ({ ...prev, confirmPassword: e.target.value }))} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
+          <Button onClick={handleCreate} disabled={createUser.isPending} className="bg-polo-red hover:bg-polo-red-dark">
+            {createUser.isPending ? "Criando..." : "Criar Usuário"}
           </Button>
         </DialogFooter>
       </DialogContent>
