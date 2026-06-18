@@ -11,6 +11,12 @@ export default {
         sm: ".1875rem", /* 3px */
       },
       colors: {
+        polo: {
+          red: '#E8002D',
+          'red-dark': '#B80024',
+          'red-light': '#FFF0F3',
+          accent: '#FF1744',
+        },
         // Flat / base colors (regular buttons)
         background: "hsl(var(--background) / <alpha-value>)",
         foreground: "hsl(var(--foreground) / <alpha-value>)",
@@ -98,10 +104,20 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "fade-in-up": {
+          "0%": { opacity: "0", transform: "translateY(12px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "count-pulse": {
+          "0%, 100%": { transform: "scale(1)" },
+          "50%": { transform: "scale(1.02)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "fade-in-up": "fade-in-up 0.5s ease-out forwards",
+        "count-pulse": "count-pulse 0.3s ease-in-out",
       },
     },
   },

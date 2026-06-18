@@ -1,18 +1,40 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, buildUrl, type CreateLicenseRequest, type UpdateLicenseRequest } from "@shared/routes";
+import { api, buildUrl } from "@shared/routes";
+import { type CreateLicenseRequest, type UpdateLicenseRequest } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
-export function useLicenses(params?: { clientId?: string }) {
+export function useLicenses(params?: { clientId?: string; page?: number; limit?: number }) {
+  const queryParams = new URLSearchParams();
+  if (params?.clientId) queryParams.set("clientId", params.clientId);
+  if (params?.page) queryParams.set("page", String(params.page));
+  if (params?.limit) queryParams.set("limit", String(params.limit));
+  const queryString = queryParams.toString();
+  const url = queryString ? `${api.licenses.list.path}?${queryString}` : api.licenses.list.path;
+
   return useQuery({
-    queryKey: [api.licenses.list.path, params?.clientId],
+    queryKey: [api.licenses.list.path, params?.clientId, params?.page, params?.limit],
     queryFn: async () => {
-      let url = api.licenses.list.path;
-      if (params?.clientId) {
-        url += `?clientId=${params.clientId}`;
-      }
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch licenses");
-      return api.licenses.list.responses[200].parse(await res.json());
+      return res.json() as Promise<{ data: any[]; total: number }>;
+    },
+  });
+}
+
+export function useLicensesWithDetails(params?: { clientId?: string; page?: number; limit?: number }) {
+  const queryParams = new URLSearchParams();
+  if (params?.clientId) queryParams.set("clientId", params.clientId);
+  if (params?.page) queryParams.set("page", String(params.page));
+  if (params?.limit) queryParams.set("limit", String(params.limit));
+  const queryString = queryParams.toString();
+  const url = queryString ? `/api/licenses/with-details?${queryString}` : "/api/licenses/with-details";
+
+  return useQuery({
+    queryKey: ["/api/licenses/with-details", params?.clientId, params?.page, params?.limit],
+    queryFn: async () => {
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch licenses with details");
+      return res.json() as Promise<{ data: any[]; total: number }>;
     },
   });
 }
@@ -40,6 +62,7 @@ export function useCreateLicense() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.licenses.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
+      queryClient.invalidateQueries({ queryKey: ["alerts"] });
       toast({ title: "Success", description: "License created successfully" });
     },
     onError: (error) => {
@@ -66,7 +89,10 @@ export function useUpdateLicense() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.licenses.list.path] });
+      queryClient.invalidateQueries({ queryKey: ["/api/licenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/licenses/with-details"] });
       queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
+      queryClient.invalidateQueries({ queryKey: ["alerts"] });
       toast({ title: "Success", description: "License updated successfully" });
     },
     onError: (error) => {
@@ -88,6 +114,7 @@ export function useDeleteLicense() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.licenses.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
+      queryClient.invalidateQueries({ queryKey: ["alerts"] });
       toast({ title: "Success", description: "License deleted successfully" });
     },
     onError: (error) => {

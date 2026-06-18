@@ -2,13 +2,21 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type CreateClientRequest, type UpdateClientRequest } from "@shared/routes";
 import { useToast } from "@/hooks/use-toast";
 
-export function useClients() {
+export function useClients(page?: number, limit?: number, search?: string, status?: string) {
+  const params = new URLSearchParams();
+  if (page) params.set("page", String(page));
+  if (limit) params.set("limit", String(limit));
+  if (search) params.set("search", search);
+  if (status && status !== "all") params.set("status", status);
+  const queryString = params.toString();
+  const url = queryString ? `${api.clients.list.path}?${queryString}` : api.clients.list.path;
+
   return useQuery({
-    queryKey: [api.clients.list.path],
+    queryKey: [api.clients.list.path, page, limit, search, status],
     queryFn: async () => {
-      const res = await fetch(api.clients.list.path, { credentials: "include" });
+      const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch clients");
-      return api.clients.list.responses[200].parse(await res.json());
+      return res.json() as Promise<{ data: any[]; total: number }>;
     },
   });
 }

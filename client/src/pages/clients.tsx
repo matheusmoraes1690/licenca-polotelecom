@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useClients, useCreateClient } from "@/hooks/use-clients";
+import { useAuth } from "@/hooks/use-auth";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
 import { 
   Dialog, 
   DialogContent, 
@@ -13,19 +13,35 @@ import {
   DialogFooter
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Plus, Search, Mail, Phone, MapPin, ChevronRight, User } from "lucide-react";
-import { Link } from "wouter";
+import { Plus, Search, Download } from "lucide-react";
+import { useExportClients } from "@/hooks/use-export";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertClientSchema, type CreateClientRequest } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { ClientCard } from "@/components/client-card";
+import { DataPagination } from "@/components/data-pagination";
 
 export default function ClientsPage() {
-  const { data: clients, isLoading } = useClients();
+  const [page, setPage] = useState(1);
+  const limit = 12;
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const { data: clientsData, isLoading } = useClients(page, limit, searchTerm, statusFilter);
+  const clients = clientsData?.data;
+  const totalPages = Math.ceil((clientsData?.total || 0) / limit);
+  const { user } = useAuth();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, statusFilter]);
   const createClient = useCreateClient();
+  const exportClients = useExportClients();
+  const canCreate = user?.role === "admin" || user?.role === "editor";
 
   const form = useForm<CreateClientRequest>({
     resolver: zodResolver(insertClientSchema),
@@ -33,7 +49,6 @@ export default function ClientsPage() {
       name: "",
       email: "",
       phone: "",
-      address: "",
       status: "active",
     },
   });
@@ -47,40 +62,70 @@ export default function ClientsPage() {
     });
   };
 
-  const filteredClients = clients?.filter(client => 
-    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   return (
     <Layout>
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-display font-bold">Clients</h1>
-          <p className="text-muted-foreground mt-1">Manage your client relationships.</p>
+          <h1 className="text-3xl font-display font-bold">Clientes</h1>
+          <p className="text-muted-foreground mt-1">Gerencie seus relacionamentos com clientes.</p>
         </div>
         
-        <div className="flex gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="relative w-full md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search clients..." 
-              className="pl-10 bg-white"
+            <Input
+              placeholder="Buscar clientes..."
+              className="pl-10 h-10"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+              }}
             />
           </div>
           
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger asChild>
-              <Button className="shadow-lg shadow-primary/25">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Client
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+          <div className="flex gap-2 border rounded-lg p-1 bg-card h-10 items-center">
+            <Button
+              variant={statusFilter === "all" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => { setStatusFilter("all"); setPage(1); }}
+              className="h-8"
+            >
+              Todos
+            </Button>
+            <Button
+              variant={statusFilter === "active" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => { setStatusFilter("active"); setPage(1); }}
+              className="h-8"
+            >
+              Ativos
+            </Button>
+            <Button
+              variant={statusFilter === "inactive" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => { setStatusFilter("inactive"); setPage(1); }}
+              className="h-8"
+            >
+              Desativados
+            </Button>
+          </div>
+          
+          <Button variant="outline" onClick={() => exportClients.mutate()} disabled={exportClients.isPending} className="h-10">
+            <Download className="w-4 h-4 mr-2" />
+            Exportar CSV
+          </Button>
+          {canCreate && (
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger asChild>
+                <Button className="shadow-lg shadow-primary/25 h-10">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Adicionar Cliente
+                </Button>
+              </DialogTrigger>
+            <DialogContent className="max-w-[90vw] sm:max-w-[500px] md:max-w-[600px] lg:max-w-[700px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Add New Client</DialogTitle>
+                <DialogTitle>Adicionar Novo Cliente</DialogTitle>
               </DialogHeader>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -89,9 +134,9 @@ export default function ClientsPage() {
                     name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Name</FormLabel>
+                        <FormLabel>Nome</FormLabel>
                         <FormControl>
-                          <Input placeholder="Acme Corp" {...field} />
+                          <Input placeholder="Empresa XYZ" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -115,9 +160,9 @@ export default function ClientsPage() {
                     name="phone"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Phone</FormLabel>
+                        <FormLabel>Telefone</FormLabel>
                         <FormControl>
-                          <Input placeholder="+1 234 567 890" {...field} value={field.value || ''} />
+                          <Input placeholder="(11) 98765-4321" {...field} value={field.value || ''} onChange={(e) => field.onChange(e.target.value || null)} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -125,12 +170,25 @@ export default function ClientsPage() {
                   />
                   <FormField
                     control={form.control}
-                    name="address"
+                    name="status"
                     render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Address</FormLabel>
+                      <FormItem className="space-y-3">
+                        <FormLabel>STATUS DO CLIENTE</FormLabel>
                         <FormControl>
-                          <Input placeholder="123 Business Rd" {...field} value={field.value || ''} />
+                          <RadioGroup
+                            onValueChange={field.onChange}
+                            value={field.value || "active"}
+                            className="flex gap-4"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="active" id="active" />
+                              <Label htmlFor="active" className="font-normal cursor-pointer">ATIVO</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="inactive" id="inactive" />
+                              <Label htmlFor="inactive" className="font-normal cursor-pointer">DESATIVADO</Label>
+                            </div>
+                          </RadioGroup>
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -138,70 +196,32 @@ export default function ClientsPage() {
                   />
                   <DialogFooter>
                     <Button type="submit" disabled={createClient.isPending}>
-                      {createClient.isPending ? "Creating..." : "Create Client"}
+                      {createClient.isPending ? "Criando..." : "Criar Cliente"}
                     </Button>
                   </DialogFooter>
                 </form>
               </Form>
             </DialogContent>
           </Dialog>
+          )}
         </div>
       </div>
 
       {isLoading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[1,2,3,4,5,6].map(i => (
-            <div key={i} className="h-40 rounded-xl bg-muted animate-pulse" />
+            <div key={i} className="h-48 rounded-xl bg-muted animate-pulse" />
           ))}
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredClients?.map(client => (
-            <Link key={client.id} href={`/clients/${client.id}`} className="block group">
-               <Card className="h-full border-border/50 hover:border-primary/50 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 bg-card">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between mb-6">
-                      <div className="flex items-center gap-4">
-                        <Avatar className="h-12 w-12 border-2 border-white shadow-sm">
-                          <AvatarFallback className="bg-gradient-to-br from-blue-100 to-blue-200 text-blue-700 font-bold">
-                            {client.name.substring(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <h3 className="font-bold text-lg leading-tight group-hover:text-primary transition-colors">{client.name}</h3>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 mt-1">
-                            {client.status}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
-                        <ChevronRight className="w-4 h-4" />
-                      </div>
-                    </div>
-
-                    <div className="space-y-3 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <Mail className="w-4 h-4" />
-                        <span className="truncate">{client.email}</span>
-                      </div>
-                      {client.phone && (
-                        <div className="flex items-center gap-2">
-                          <Phone className="w-4 h-4" />
-                          <span>{client.phone}</span>
-                        </div>
-                      )}
-                      {client.address && (
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4" />
-                          <span className="truncate">{client.address}</span>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-               </Card>
-            </Link>
-          ))}
-        </div>
+        <>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {clients?.map(client => (
+              <ClientCard key={client.id} client={client} />
+            ))}
+          </div>
+          <DataPagination page={page} totalPages={totalPages} onPageChange={setPage} />
+        </>
       )}
     </Layout>
   );
