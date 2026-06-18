@@ -70,7 +70,7 @@ caddy version
 ### 5.1 Criar usuário de sistema (recomendado)
 
 ```bash
-sudo adduser --system --group --home /opt/license-manager licmgr
+sudo adduser --system --group --home /opt/license-manager polomanager
 ```
 
 ### 5.2 Transferir o código
@@ -78,7 +78,7 @@ sudo adduser --system --group --home /opt/license-manager licmgr
 **Opção A — via Git:**
 
 ```bash
-sudo -u licmgr git clone <URL_DO_REPOSITORIO> /opt/license-manager
+sudo -u polomanager git clone <URL_DO_REPOSITORIO> /opt/license-manager
 ```
 
 **Opção B — via SCP (do Windows):**
@@ -90,13 +90,13 @@ scp -r "C:\Users\mathe\App\License-Manager" usuario@servidor:/opt/license-manage
 Depois, no servidor:
 
 ```bash
-sudo chown -R licmgr:licmgr /opt/license-manager
+sudo chown -R polomanager:polomanager /opt/license-manager
 ```
 
 ### 5.3 Instalar dependências Node
 
 ```bash
-sudo -u licmgr bash -c "cd /opt/license-manager && npm install"
+sudo -u polomanager bash -c "cd /opt/license-manager && npm install"
 ```
 
 ---
@@ -106,7 +106,7 @@ sudo -u licmgr bash -c "cd /opt/license-manager && npm install"
 Criar o arquivo `.env` na raiz do projeto:
 
 ```bash
-sudo -u licmgr nano /opt/license-manager/.env
+sudo -u polomanager nano /opt/license-manager/.env
 ```
 
 Conteúdo mínimo para produção:
@@ -116,7 +116,7 @@ Conteúdo mínimo para produção:
 DATABASE_URL=postgresql://USUARIO:SENHA@HOST:5432/BANCO
 
 # Servidor
-PORT=3000
+PORT=3021
 NODE_ENV=production
 
 # Segurança — gerar com: openssl rand -base64 32
@@ -143,7 +143,7 @@ sudo chmod 600 /opt/license-manager/.env
 ## 7. Build da Aplicação
 
 ```bash
-sudo -u licmgr bash -c "cd /opt/license-manager && npm run build"
+sudo -u polomanager bash -c "cd /opt/license-manager && npm run build"
 ```
 
 Este comando executa `script/build.ts` e gera:
@@ -161,7 +161,7 @@ dist/
 Execute o schema no banco PostgreSQL (apenas na primeira instalação ou após atualizações):
 
 ```bash
-sudo -u licmgr bash -c "cd /opt/license-manager && npx drizzle-kit push"
+sudo -u polomanager bash -c "cd /opt/license-manager && npx drizzle-kit push"
 ```
 
 ---
@@ -171,7 +171,7 @@ sudo -u licmgr bash -c "cd /opt/license-manager && npx drizzle-kit push"
 ### 9.1 Criar arquivo de ecossistema PM2
 
 ```bash
-sudo -u licmgr nano /opt/license-manager/ecosystem.config.cjs
+sudo -u polomanager nano /opt/license-manager/ecosystem.config.cjs
 ```
 
 Conteúdo:
@@ -180,7 +180,7 @@ Conteúdo:
 module.exports = {
   apps: [
     {
-      name: "license-manager",
+      name: "PoloManager",
       script: "dist/index.cjs",
       cwd: "/opt/license-manager",
       instances: 1,
@@ -189,11 +189,11 @@ module.exports = {
       env_file: "/opt/license-manager/.env",
       env: {
         NODE_ENV: "production",
-        PORT: "3000",
+        PORT: "3021",
       },
       log_date_format: "YYYY-MM-DD HH:mm:ss",
-      error_file: "/var/log/license-manager/error.log",
-      out_file: "/var/log/license-manager/out.log",
+      error_file: "/var/log/PoloManager/error.log",
+      out_file: "/var/log/PoloManager/out.log",
       restart_delay: 3000,
       max_restarts: 10,
     },
@@ -204,31 +204,31 @@ module.exports = {
 ### 9.2 Criar diretório de logs
 
 ```bash
-sudo mkdir -p /var/log/license-manager
-sudo chown licmgr:licmgr /var/log/license-manager
+sudo mkdir -p /var/log/PoloManager
+sudo chown polomanager:polomanager /var/log/PoloManager
 ```
 
 ### 9.3 Iniciar a aplicação com PM2
 
 ```bash
-sudo -u licmgr bash -c "cd /opt/license-manager && pm2 start ecosystem.config.cjs"
+sudo -u polomanager bash -c "cd /opt/license-manager && pm2 start ecosystem.config.cjs"
 ```
 
 Verificar status:
 
 ```bash
-sudo -u licmgr pm2 status
-sudo -u licmgr pm2 logs license-manager --lines 50
+sudo -u polomanager pm2 status
+sudo -u polomanager pm2 logs PoloManager --lines 50
 ```
 
 ### 9.4 Configurar PM2 para iniciar no boot
 
 ```bash
 # Gerar script de startup (executar como root)
-sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u licmgr --hp /opt/license-manager
+sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u polomanager --hp /opt/license-manager
 
 # Salvar os processos ativos
-sudo -u licmgr pm2 save
+sudo -u polomanager pm2 save
 ```
 
 ---
@@ -245,7 +245,7 @@ sudo nano /etc/caddy/Caddyfile
 
 ```caddy
 seu-dominio.com.br {
-    reverse_proxy localhost:3000
+    reverse_proxy localhost:3021
 }
 ```
 
@@ -255,7 +255,7 @@ seu-dominio.com.br {
 
 ```caddy
 :80 {
-    reverse_proxy localhost:3000
+    reverse_proxy localhost:3021
 }
 ```
 
@@ -287,14 +287,14 @@ sudo ufw allow OpenSSH
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 
-# Bloquear porta 3000 externamente (Caddy faz o proxy)
-# A porta 3000 não precisa ser aberta — apenas localhost acessa
+# Bloquear porta 3021 externamente (Caddy faz o proxy)
+# A porta 3021 não precisa ser aberta — apenas localhost acessa
 
 sudo ufw enable
 sudo ufw status
 ```
 
-> A porta `3000` do Node.js **não deve** ser exposta publicamente. Todo o tráfego externo passa pelo Caddy nas portas 80/443.
+> A porta `3021` do Node.js **não deve** ser exposta publicamente. Todo o tráfego externo passa pelo Caddy nas portas 80/443.
 
 ---
 
@@ -302,10 +302,10 @@ sudo ufw status
 
 | Verificação | Comando |
 |-------------|---------|
-| Processo Node em execução | `sudo -u licmgr pm2 status` |
-| Logs da aplicação | `sudo -u licmgr pm2 logs license-manager` |
+| Processo Node em execução | `sudo -u polomanager pm2 status` |
+| Logs da aplicação | `sudo -u polomanager pm2 logs PoloManager` |
 | Status do Caddy | `sudo systemctl status caddy` |
-| Conectividade local | `curl -s http://localhost:3000/api/auth/user` |
+| Conectividade local | `curl -s http://localhost:3021/api/auth/user` |
 | Conectividade via Caddy | `curl -s http://localhost/api/auth/user` |
 
 Acesse o sistema no navegador em `https://seu-dominio.com.br` (ou `http://IP_DO_SERVIDOR`).
@@ -322,24 +322,24 @@ Acesse o sistema no navegador em `https://seu-dominio.com.br` (ou `http://IP_DO_
 
 ```bash
 # Reiniciar a aplicação
-sudo -u licmgr pm2 restart license-manager
+sudo -u polomanager pm2 restart PoloManager
 
 # Parar a aplicação
-sudo -u licmgr pm2 stop license-manager
+sudo -u polomanager pm2 stop PoloManager
 
 # Ver logs em tempo real
-sudo -u licmgr pm2 logs license-manager
+sudo -u polomanager pm2 logs PoloManager
 
 # Monitorar CPU/RAM
-sudo -u licmgr pm2 monit
+sudo -u polomanager pm2 monit
 
 # Recarregar Caddy após editar Caddyfile
 sudo systemctl reload caddy
 
 # Atualizar a aplicação (pull + rebuild)
-sudo -u licmgr git -C /opt/license-manager pull
-sudo -u licmgr bash -c "cd /opt/license-manager && npm install && npm run build"
-sudo -u licmgr pm2 restart license-manager
+sudo -u polomanager git -C /opt/license-manager pull
+sudo -u polomanager bash -c "cd /opt/license-manager && npm install && npm run build"
+sudo -u polomanager pm2 restart PoloManager
 ```
 
 ---
@@ -355,7 +355,7 @@ sudo -u licmgr pm2 restart license-manager
 ├── ecosystem.config.cjs   ← configuração do PM2
 └── ...
 
-/var/log/license-manager/
+/var/log/PoloManager/
 ├── out.log                ← stdout da aplicação
 └── error.log              ← stderr da aplicação
 
@@ -364,4 +364,4 @@ sudo -u licmgr pm2 restart license-manager
 
 ---
 
-> **Nota:** Esta documentação assume PostgreSQL remoto já provisionado. O servidor Node.js (Express) serve simultaneamente a API REST e o frontend React estático na porta `3000`. O Caddy atua exclusivamente como reverse proxy com TLS.
+> **Nota:** Esta documentação assume PostgreSQL remoto já provisionado. O servidor Node.js (Express) serve simultaneamente a API REST e o frontend React estático na porta `3021`. O Caddy atua exclusivamente como reverse proxy com TLS.
